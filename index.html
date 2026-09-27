@@ -407,7 +407,6 @@ footer .tiny{font-size:.6rem;letter-spacing:.4em;text-transform:uppercase;font-w
 .hug-toast{position:fixed;bottom:90px;right:clamp(18px,3vw,28px);z-index:600;padding:11px 20px;border-radius:100px;background:var(--coffee);color:var(--cream);font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;font-weight:700;pointer-events:none;box-shadow:0 14px 34px -12px rgba(43,26,15,.6);animation:toastIn 2.4s var(--ease) forwards}
 @keyframes toastIn{0%{transform:translateY(14px);opacity:0}15%,80%{transform:none;opacity:1}100%{transform:translateY(-6px);opacity:0}}
 #beans{position:fixed;inset:0;z-index:0;pointer-events:none}
-.upload-input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
 .mem-empty{grid-column:1/-1;text-align:center;padding:20px;color:var(--coffee-faint);font-size:.85rem}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;scroll-behavior:auto !important}
@@ -541,11 +540,6 @@ footer .tiny{font-size:.6rem;letter-spacing:.4em;text-transform:uppercase;font-w
         <span class="mem-btn-ic">❦</span>
         <span>Open memories</span>
       </button>
-      <button class="mem-btn ghost2" id="memAdd" aria-label="Add photos to the memory book">
-        <span class="mem-btn-ic">+</span>
-        <span>Add our photos</span>
-      </button>
-      <input type="file" id="memFileInput" class="upload-input" accept="image/*" multiple>
     </div>
   </div>
 </section>
@@ -851,7 +845,7 @@ const CONFIG = {
   herName: "Tlaye",
   nickname: "Yene Tla",
   relationship: "my girlfriend",
-  yourName: "Dagi.",
+  yourName: "your J.",
   togetherSince: "2023-02-14",
   firstCallDate: "2026-04-24",
   phrases: [
@@ -864,14 +858,11 @@ const CONFIG = {
     { am:"ጣፋጭ", translit:"Tafach", meaning:"Sweet one" },
     { am:"እወድሻለሁ", translit:"Ewedishalehu", meaning:"I love you" }
   ],
-  // ═══ PHOTOS THAT EVERYONE CAN SEE ═══
-  // Put your image files in a folder called "images" next to index.html.
-  // Use simple names: 1.jpg, 2.jpg, 3.jpg ... (no spaces, no Amharic).
-  // Then list them here with optional captions.
   photos: [
-       { url: "photo.jpg", caption: "the day we met" },
-       { url: "photo1.jpg", caption: "your smile" },
-       { url: "images/3.jpg", caption: "" },
+    { url: "photo.jpg", caption: "the first time I saw your face on Botim" },
+    { url: "photos2.jpg",       caption: "you, laughing at something I said" },
+    { url: "photos/us.jpg",         caption: "the day I knew — 24.04.2026" },
+    { url: "https://i.imgur.com/XXXX.jpg", caption: "that night you couldn't stop smiling" }
   ],
   rounds: [
     { am:"አቦል", en:"Abol — the first round", text:"", tags:["the first sip","you arrived","never the same"] },
@@ -930,63 +921,6 @@ const toISO = d => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"
 const fmtDay = d => d.toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" });
 const fmtShort = d => d.toLocaleDateString("en-GB", { day:"numeric", month:"short" });
 const daysBetween = (a, b) => Math.floor((b - a) / DAY_MS);
-
-/* ---------- photo storage (IndexedDB) ---------- */
-/* Real photos live in the browser's IndexedDB on this device, since a plain
-   HTML file can't read your photo library on its own. Use "Add our photos"
-   in the Memories section to upload some — they'll be remembered next time
-   this page is opened in the same browser. */
-const PhotoDB = (function(){
-  const DB_NAME = "tlaye-photos-db";
-  const STORE = "photos";
-  let dbp = null;
-
-  function open(){
-    if (dbp) return dbp;
-    dbp = new Promise((resolve, reject) => {
-      if (!window.indexedDB) { reject(new Error("no indexeddb")); return; }
-      const req = indexedDB.open(DB_NAME, 1);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(STORE)) {
-          db.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
-        }
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    return dbp;
-  }
-
-  async function addFiles(files){
-    try {
-      const db = await open();
-      const tx = db.transaction(STORE, "readwrite");
-      const store = tx.objectStore(STORE);
-      for (const file of files) {
-        store.add({ blob: file, caption: "", added: Date.now() });
-      }
-      return new Promise((resolve, reject) => {
-        tx.oncomplete = () => resolve(true);
-        tx.onerror = () => reject(tx.error);
-      });
-    } catch (e) { return false; }
-  }
-
-  async function getAll(){
-    try {
-      const db = await open();
-      return new Promise((resolve) => {
-        const tx = db.transaction(STORE, "readonly");
-        const req = tx.objectStore(STORE).getAll();
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = () => resolve([]);
-      });
-    } catch (e) { return []; }
-  }
-
-  return { addFiles, getAll };
-})();
 
 /* ---------- phrases ---------- */
 (function(){
@@ -1094,12 +1028,10 @@ function renderStats(){
 renderCalendar();
 renderStats();
 
-/* ---------- memory book (uses uploaded photos, stored on-device) ---------- */
+/* ---------- memory book ---------- */
 (function(){
   const cnt = $("#memCount");
   const openBtn = $("#memOpen");
-  const addBtn = $("#memAdd");
-  const fileInput = $("#memFileInput");
 
   function updateCount(){
     if (cnt) cnt.textContent = CONFIG.photos.length;
@@ -1107,39 +1039,15 @@ renderStats();
     if (stat) stat.textContent = CONFIG.photos.length;
   }
 
-  async function loadPhotos(){
-    const rows = await PhotoDB.getAll();
-    CONFIG.photos = rows.map(r => ({
-      url: URL.createObjectURL(r.blob),
-      caption: r.caption || ""
-    }));
-    updateCount();
-  }
-
   if (openBtn) openBtn.addEventListener("click", () => {
     if (!CONFIG.photos.length) {
-      if (addBtn) addBtn.classList.add("shake");
-      setTimeout(() => addBtn && addBtn.classList.remove("shake"), 600);
-      alert("The memory book is empty for now — tap \"Add our photos\" to fill it with your own pictures. They stay saved on this device.");
+      alert("The memory book is empty for now.");
       return;
     }
     openLightbox(0);
   });
 
-  if (addBtn && fileInput) {
-    addBtn.addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", async () => {
-      const files = Array.from(fileInput.files || []);
-      if (!files.length) return;
-      addBtn.querySelector("span:last-child").textContent = "Adding…";
-      await PhotoDB.addFiles(files);
-      await loadPhotos();
-      addBtn.querySelector("span:last-child").textContent = "Add our photos";
-      fileInput.value = "";
-    });
-  }
-
-  loadPhotos();
+  updateCount();
 })();
 
 /* ---------- cycle tracker ---------- */
